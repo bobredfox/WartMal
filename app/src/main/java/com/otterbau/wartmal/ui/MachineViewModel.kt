@@ -68,9 +68,21 @@ class MachineViewModel : ViewModel() {
         _machines.value = repository.getMachines()
     }
 
-    fun updateCheckStatus(machineId: String, checkId: String, status: CheckStatus) {
-        repository.updateCheckStatus(machineId, checkId, status)
-        _machines.value = repository.getMachines()
+    fun updateCheck(machineId: String, checkId: String, title: String, description: String) {
+        if (repository.updateCheck(machineId, checkId, title, description)) {
+            _machines.value = repository.getMachines()
+        }
+    }
+
+    fun updateCheckStatus(
+        machineId: String,
+        checkId: String,
+        status: CheckStatus,
+        note: String = ""
+    ) {
+        if (repository.updateCheckStatus(machineId, checkId, status, note)) {
+            _machines.value = repository.getMachines()
+        }
     }
 
     fun deleteCheck(machineId: String, checkId: String) {
