@@ -26,6 +26,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+private const val MAX_FIELD_LENGTH = 120
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditMachineScreen(
@@ -72,6 +74,8 @@ fun AddEditMachineScreen(
                 onValueChange = { name = it },
                 label = { Text("Name") },
                 singleLine = true,
+                isError = name.length > MAX_FIELD_LENGTH,
+                supportingText = { Text("${name.length}/$MAX_FIELD_LENGTH") },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -79,6 +83,8 @@ fun AddEditMachineScreen(
                 onValueChange = { serialNumber = it },
                 label = { Text("Serial number") },
                 singleLine = true,
+                isError = serialNumber.length > MAX_FIELD_LENGTH,
+                supportingText = { Text("${serialNumber.length}/$MAX_FIELD_LENGTH") },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -86,11 +92,13 @@ fun AddEditMachineScreen(
                 onValueChange = { location = it },
                 label = { Text("Location") },
                 singleLine = true,
+                isError = location.length > MAX_FIELD_LENGTH,
+                supportingText = { Text("${location.length}/$MAX_FIELD_LENGTH") },
                 modifier = Modifier.fillMaxWidth()
             )
             Button(
                 onClick = {
-                    if (name.isNotBlank()) {
+                    if (name.isNotBlank() && name.length <= MAX_FIELD_LENGTH && serialNumber.length <= MAX_FIELD_LENGTH && location.length <= MAX_FIELD_LENGTH) {
                         if (isEdit && machineId != null) {
                             val existing = viewModel.getMachine(machineId)
                             if (existing != null) {
@@ -105,7 +113,7 @@ fun AddEditMachineScreen(
                         }
                     }
                 },
-                enabled = name.isNotBlank(),
+                enabled = name.isNotBlank() && name.length <= MAX_FIELD_LENGTH && serialNumber.length <= MAX_FIELD_LENGTH && location.length <= MAX_FIELD_LENGTH,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (isEdit) "Save" else "Add")

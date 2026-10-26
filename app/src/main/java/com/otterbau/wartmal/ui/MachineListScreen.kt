@@ -2,12 +2,17 @@ package com.otterbau.wartmal.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,9 +25,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.otterbau.wartmal.data.CheckStatus
+import com.otterbau.wartmal.data.CheckSummary
 import com.otterbau.wartmal.data.Machine
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,13 +88,12 @@ private fun MachineCard(
     machine: Machine,
     onClick: () -> Unit
 ) {
-    val pendingCount = machine.checks.count { it.status == CheckStatus.PENDING }
-    val failedCount = machine.checks.count { it.status == CheckStatus.FAILED }
+    val summary = CheckSummary.from(machine.checks)
 
     Card(
         onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -104,17 +110,57 @@ private fun MachineCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            val summary = buildString {
-                append("${machine.checks.size} check${if (machine.checks.size != 1) "s" else ""}")
-                if (pendingCount > 0) append("  -  $pendingCount pending")
-                if (failedCount > 0) append("  -  $failedCount failed")
+            if (summary.total > 0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${summary.total} check${if (summary.total != 1) "s" else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (summary.failed > 0) {
+                        SummaryBadge(
+                            icon = Icons.Filled.Error,
+                            text = "${summary.failed} failed",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (summary.pending > 0) {
+                        SummaryBadge(
+                            icon = Icons.Filled.Schedule,
+                            text = "${summary.pending} pending",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (summary.passed > 0) {
+                        SummaryBadge(
+                            icon = Icons.Filled.CheckCircle,
+                            text = "${summary.passed} passed",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
         }
+    }
+}
+
+@Composable
+private fun SummaryBadge(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: Color) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = color
+        )
     }
 }
