@@ -3,6 +3,9 @@ package com.otterbau.wartmal
 import com.otterbau.wartmal.data.CheckStatus
 import com.otterbau.wartmal.data.CheckSummary
 import com.otterbau.wartmal.data.MachineRepository
+import com.otterbau.wartmal.data.RecurrenceInterval
+import com.otterbau.wartmal.data.dueSoonCount
+import com.otterbau.wartmal.data.overdueCount
 import com.otterbau.wartmal.data.sortedForDisplay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -240,5 +243,205 @@ class MachineRepositoryTest {
         val sorted = checks.sortedForDisplay()
 
         assertEquals(listOf(failed.id, pending.id, passedNew.id, passedOld.id), sorted.map { it.id })
+    }
+
+    @Test
+    fun addCheck_withRecurrenceSetsNextDueDate() {
+        val machineId = newMachine()
+        val check = repository.addCheck(
+            machineId,
+            "Oil change",
+            "desc",
+            RecurrenceInterval.WEEKLY,
+            now = 1_000L
+        )
+        assertEquals(RecurrenceInterval.WEEKLY, check.recurrence)
+        assertEquals(1_000L + 7 * 86_400_000L, check.nextDueAt)
+    }
+
+    @Test
+    fun addCheck_withoutRecurrenceHasNoNextDueDate() {
+        val machineId = newMachine()
+        val check = repository.addCheck(machineId, "One-off", "desc", now = 1_000L)
+        assertEquals(RecurrenceInterval.NONE, check.recurrence)
+        assertNull(check.nextDueAt)
+    }
+
+    @Test
+    fun completeRecurringCheck_schedulesNextDueAndRecordsHistory() {
+        val machineId = newMachine()
+        val check = repository.addCheck(
+            machineId,
+            "Lubrication",
+            "desc",
+            RecurrenceInterval.DAILY,
+            now = 1_000L
+        )
+        assertTrue(
+            repository.updateCheckStatus(
+                machineId,
+                check.id,
+                CheckStatus.PASSED,
+                "done",
+                now = 5_000L
+            )
+        )
+
+        val updated = repository.getMachine(machineId)!!.checks.single()
+        assertEquals(CheckStatus.PENDING, updated.status)
+        assertEquals(5_000L + 86_400_000L, updated.nextDueAt)
+        assertNull(updated.performedAt)
+
+        val history = repository.getHistory(machineId)
+        assertEquals(1, history.size)
+        assertEquals(check.id, history.single().checkId)
+        assertEquals("Lubrication", history.single().checkTitle)
+        assertEquals(CheckStatus.PASSED, history.single().status)
+        assertEquals(5_000L, history.single().performedAt)
+        assertEquals("done", history.single().note)
+        assertEquals(RecurrenceInterval.DAILY, history.single().recurrence)
+    }
+
+    @Test
+    fun completeNonRecurringCheck_keepsStatusAndDoesNotScheduleNextDue() {
+        val machineId = newMachine()
+        val check = repository.addCheck(machineId, "One-off", "desc", now = 1_000L)
+        repository.updateCheckStatus(
+            machineId,
+            check.id,
+            CheckStatus.PASSED,
+            "ok",
+            now = 5_000L
+        )
+
+        val updated = repository.getMachine(machineId)!!.checks.single()
+        assertEquals(CheckStatus.PASSED, updated.status)
+        assertEquals(5_000L, updated.performedAt)
+        assertNull(updated.nextDueAt)
+
+        val history = repository.getHistory(machineId)
+        assertEquals(1, history.size)
+        assertEquals(CheckStatus.PASSED, history.single().status)
+    }
+
+    @Test
+    fun history_accumulatesPerMachineAndIsSortedNewestFirst() {
+        val machineId = newMachine()
+        val check = repository.addCheck(
+            machineId,
+            "Recurring",
+            "",
+            RecurrenceInterval.WEEKLY,
+            now = 0L
+        )
+        repository.updateCheckStatus(machineId, check.id, CheckStatus.PASSED, "first", now = 10L)
+        repository.updateCheckStatus(machineId, check.id, CheckStatus.FAILED, "second", now = 20L)
+        repository.updateCheckStatus(machineId, check.id, CheckStatus.PASSED, "third", now = 30L)
+
+        val history = repository.getHistory(machineId)
+        assertEquals(3, history.size)
+        assertEquals(listOf(30L, 20L, 10L), history.map { it.performedAt })
+        assertEquals(
+            listOf("third", "second", "first"),
+            history.map { it.note }
+        )
+
+        val otherMachineId = newMachine()
+        assertEquals(0, repository.getHistory(otherMachineId).size)
+    }
+
+    @Test
+    fun resetToPending_doesNotRecordHistory() {
+        val machineId = newMachine()
+        val check = repository.addCheck(machineId, "Check", "")
+        repository.updateCheckStatus(machineId, check.id, CheckStatus.PASSED, "ok", now = 10L)
+        repository.updateCheckStatus(machineId, check.id, CheckStatus.PENDING, now = 20L)
+        assertEquals(1, repository.getHistory(machineId).size)
+    }
+
+    @Test
+    fun overdueAndDueSoon_areDerivedFromNextDueDate() {
+        val machineId = newMachine()
+        val overdueCheck = repository.addCheck(
+            machineId,
+            "Overdue",
+            "",
+            RecurrenceInterval.DAILY,
+            now = 0L
+        )
+        repository.addCheck(
+            machineId,
+            "Due soon",
+            "",
+            RecurrenceInterval.DAILY,
+            now = 3 * 86_400_000L
+        )
+        repository.addCheck(machineId, "No recurrence", "")
+
+        val now = 2 * 86_400_000L
+        val machine = repository.getMachine(machineId)!!
+        assertTrue(machine.checks.single { it.id == overdueCheck.id }.isOverdue(now))
+        assertEquals(1, machine.overdueCount(now))
+        assertEquals(1, machine.dueSoonCount(now))
+    }
+
+    @Test
+    fun sortedForDisplay_putsOverdueChecksFirst() {
+        val machineId = newMachine()
+        val overdueCheck = repository.addCheck(
+            machineId,
+            "Overdue",
+            "",
+            RecurrenceInterval.DAILY,
+            now = 0L
+        )
+        val normal = repository.addCheck(machineId, "Normal", "")
+        val now = 5 * 86_400_000L
+        val sorted = repository.getMachine(machineId)!!.checks.sortedForDisplay(now)
+        assertEquals(overdueCheck.id, sorted.first().id)
+        assertEquals(normal.id, sorted.last().id)
+    }
+
+    @Test
+    fun updateCheck_changingRecurrenceUpdatesNextDueDate() {
+        val machineId = newMachine()
+        val check = repository.addCheck(machineId, "Check", "", now = 1_000L)
+        assertTrue(
+            repository.updateCheck(
+                machineId,
+                check.id,
+                "Check",
+                "",
+                RecurrenceInterval.YEARLY,
+                now = 2_000L
+            )
+        )
+        val updated = repository.getMachine(machineId)!!.checks.single()
+        assertEquals(RecurrenceInterval.YEARLY, updated.recurrence)
+        assertEquals(2_000L + 365 * 86_400_000L, updated.nextDueAt)
+    }
+
+    @Test
+    fun updateCheck_removingRecurrenceClearsNextDueDate() {
+        val machineId = newMachine()
+        val check = repository.addCheck(
+            machineId,
+            "Check",
+            "",
+            RecurrenceInterval.WEEKLY,
+            now = 1_000L
+        )
+        assertTrue(
+            repository.updateCheck(
+                machineId,
+                check.id,
+                "Check",
+                "",
+                RecurrenceInterval.NONE,
+                now = 2_000L
+            )
+        )
+        val updated = repository.getMachine(machineId)!!.checks.single()
+        assertNull(updated.nextDueAt)
     }
 }
