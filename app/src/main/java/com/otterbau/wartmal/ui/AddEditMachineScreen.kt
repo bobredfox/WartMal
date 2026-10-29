@@ -13,10 +13,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 
 private const val MAX_FIELD_LENGTH = 120
@@ -49,15 +52,27 @@ fun AddEditMachineScreen(
         }
     }
 
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val nameValid = name.isNotBlank() && name.length <= MAX_FIELD_LENGTH
+    val serialValid = serialNumber.length <= MAX_FIELD_LENGTH
+    val locationValid = location.length <= MAX_FIELD_LENGTH
+    val formValid = nameValid && serialValid && locationValid
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text(if (isEdit) "Edit Machine" else "Add Machine") },
+            LargeTopAppBar(
+                title = { Text(if (isEdit) "Edit machine" else "New machine") },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.navigateBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             )
         }
     ) { innerPadding ->
@@ -73,50 +88,56 @@ fun AddEditMachineScreen(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text("Name") },
+                placeholder = { Text("e.g. CNC Milling Machine A1") },
                 singleLine = true,
-                isError = name.length > MAX_FIELD_LENGTH,
+                isError = !nameValid,
                 supportingText = { Text("${name.length}/$MAX_FIELD_LENGTH") },
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = serialNumber,
                 onValueChange = { serialNumber = it },
-                label = { Text("Serial number") },
+                label = { Text("Serial number (optional)") },
                 singleLine = true,
                 isError = serialNumber.length > MAX_FIELD_LENGTH,
                 supportingText = { Text("${serialNumber.length}/$MAX_FIELD_LENGTH") },
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = location,
                 onValueChange = { location = it },
-                label = { Text("Location") },
+                label = { Text("Location (optional)") },
+                placeholder = { Text("e.g. Workshop Floor 1 - Bay 3") },
                 singleLine = true,
                 isError = location.length > MAX_FIELD_LENGTH,
                 supportingText = { Text("${location.length}/$MAX_FIELD_LENGTH") },
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth()
             )
             Button(
                 onClick = {
-                    if (name.isNotBlank() && name.length <= MAX_FIELD_LENGTH && serialNumber.length <= MAX_FIELD_LENGTH && location.length <= MAX_FIELD_LENGTH) {
-                        if (isEdit && machineId != null) {
-                            val existing = viewModel.getMachine(machineId)
-                            if (existing != null) {
-                                viewModel.updateMachine(
-                                    existing, name.trim(), serialNumber.trim(), location.trim()
-                                )
-                            }
-                        } else {
-                            viewModel.addMachine(
-                                name.trim(), serialNumber.trim(), location.trim()
+                    if (isEdit && machineId != null) {
+                        val existing = viewModel.getMachine(machineId)
+                        if (existing != null) {
+                            viewModel.updateMachine(
+                                existing, name.trim(), serialNumber.trim(), location.trim()
                             )
                         }
+                    } else {
+                        viewModel.addMachine(
+                            name.trim(), serialNumber.trim(), location.trim()
+                        )
                     }
                 },
-                enabled = name.isNotBlank() && name.length <= MAX_FIELD_LENGTH && serialNumber.length <= MAX_FIELD_LENGTH && location.length <= MAX_FIELD_LENGTH,
-                modifier = Modifier.fillMaxWidth()
+                enabled = formValid,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
             ) {
-                Text(if (isEdit) "Save" else "Add")
+                Text(if (isEdit) "Save changes" else "Add machine")
             }
         }
     }

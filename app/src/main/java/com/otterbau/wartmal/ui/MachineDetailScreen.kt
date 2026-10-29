@@ -4,10 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -18,8 +21,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -27,38 +30,47 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.otterbau.wartmal.data.Check
 import com.otterbau.wartmal.data.CheckStatus
 import com.otterbau.wartmal.data.CheckSummary
+import com.otterbau.wartmal.data.Machine
+import com.otterbau.wartmal.data.MaintenanceHistoryEntry
+import com.otterbau.wartmal.data.RecurrenceInterval
 import com.otterbau.wartmal.data.sortedForDisplay
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 private const val MAX_FIELD_LENGTH = 120
 private const val MAX_DESCRIPTION_LENGTH = 1000
 private const val MAX_NOTE_LENGTH = 1000
+
+private enum class DetailTab(val label: String) {
+    Checks("Maintenance"),
+    History("History")
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,11 +87,32 @@ fun MachineDetailScreen(
     var editingCheck by remember { mutableStateOf<Check?>(null) }
     var completeTarget by remember { mutableStateOf<Pair<Check, CheckStatus>?>(null) }
     var deletingCheck by remember { mutableStateOf<Check?>(null) }
+    var selectedTab by remember { mutableIntStateOf(0) }
+
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text(machine?.name ?: "Machine") },
+            LargeTopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            text = machine?.name ?: "Machine",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (machine != null) {
+                            Text(
+                                text = machine.location.ifBlank { machine.serialNumber },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.navigateBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -94,13 +127,20 @@ fun MachineDetailScreen(
                             Icon(Icons.Filled.Delete, contentDescription = "Delete machine")
                         }
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             )
         },
         floatingActionButton = {
-            if (machine != null) {
-                FloatingActionButton(onClick = { showAddCheck = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add check")
+            if (machine != null && selectedTab == DetailTab.Checks.ordinal) {
+                FilledTonalButton(onClick = { showAddCheck = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("New check")
                 }
             }
         }
@@ -119,80 +159,38 @@ fun MachineDetailScreen(
             return@Scaffold
         }
 
-        val visibleChecks = machine.checks
-            .sortedForDisplay()
-            .filter { checkFilter == null || it.status == checkFilter }
-
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            item {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Serial number",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = machine.serialNumber.ifBlank { "-" },
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "Location",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
-                    Text(
-                        text = machine.location.ifBlank { "-" },
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "Checks (${machine.checks.size})",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(top = 16.dp)
-                    )
-                    CheckSummaryRow(summary = CheckSummary.from(machine.checks))
-                }
-            }
-
-            if (machine.checks.isNotEmpty()) {
-                item {
-                    CheckFilterRow(
-                        selected = checkFilter,
-                        onSelect = { checkFilter = it }
+            TabRow(selectedTabIndex = selectedTab) {
+                DetailTab.entries.forEachIndexed { index, tab ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        text = { Text(tab.label) }
                     )
                 }
             }
 
-            if (visibleChecks.isEmpty()) {
-                item {
-                    Text(
-                        text = if (machine.checks.isEmpty()) {
-                            "No checks recorded. Tap + to add one."
-                        } else {
-                            "No checks with this status."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                items(visibleChecks, key = { it.id }) { check ->
-                    CheckCard(
-                        check = check,
-                        onComplete = { status -> completeTarget = check to status },
+            when (DetailTab.entries[selectedTab]) {
+                DetailTab.Checks -> {
+                    ChecksTab(
+                        machine = machine,
+                        checkFilter = checkFilter,
+                        onFilterChange = { checkFilter = it },
+                        onComplete = { check, status -> completeTarget = check to status },
                         onReset = {
-                            viewModel.updateCheckStatus(machine.id, check.id, CheckStatus.PENDING)
+                            viewModel.updateCheckStatus(machine.id, it.id, CheckStatus.PENDING)
                         },
-                        onEdit = { editingCheck = check },
-                        onDelete = { deletingCheck = check }
+                        onEdit = { editingCheck = it },
+                        onDelete = { deletingCheck = it }
                     )
+                }
+
+                DetailTab.History -> {
+                    HistoryTab(history = machine.history)
                 }
             }
         }
@@ -200,13 +198,14 @@ fun MachineDetailScreen(
 
     if (showAddCheck && machine != null) {
         CheckFormDialog(
-            dialogTitle = "Add check",
+            dialogTitle = "New maintenance check",
             initialTitle = "",
             initialDescription = "",
+            initialRecurrence = RecurrenceInterval.NONE,
             confirmLabel = "Add",
             onDismiss = { showAddCheck = false },
-            onConfirm = { title, description ->
-                viewModel.addCheck(machine.id, title, description)
+            onConfirm = { title, description, recurrence ->
+                viewModel.addCheck(machine.id, title, description, recurrence)
                 showAddCheck = false
             }
         )
@@ -218,10 +217,11 @@ fun MachineDetailScreen(
                 dialogTitle = "Edit check",
                 initialTitle = check.title,
                 initialDescription = check.description,
+                initialRecurrence = check.recurrence,
                 confirmLabel = "Save",
                 onDismiss = { editingCheck = null },
-                onConfirm = { title, description ->
-                    viewModel.updateCheck(machine.id, check.id, title, description)
+                onConfirm = { title, description, recurrence ->
+                    viewModel.updateCheck(machine.id, check.id, title, description, recurrence)
                     editingCheck = null
                 }
             )
@@ -288,36 +288,247 @@ fun MachineDetailScreen(
 }
 
 @Composable
-private fun CheckSummaryRow(summary: CheckSummary) {
-    if (summary.total == 0) return
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+private fun ChecksTab(
+    machine: Machine,
+    checkFilter: CheckStatus?,
+    onFilterChange: (CheckStatus?) -> Unit,
+    onComplete: (Check, CheckStatus) -> Unit,
+    onReset: (Check) -> Unit,
+    onEdit: (Check) -> Unit,
+    onDelete: (Check) -> Unit
+) {
+    val visibleChecks = machine.checks
+        .sortedForDisplay()
+        .filter { checkFilter == null || it.status == checkFilter }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
     ) {
-        if (summary.failed > 0) {
-            SummaryItem(text = "${summary.failed} failed", color = MaterialTheme.colorScheme.error)
+        item {
+            MachineInfoCard(machine = machine)
         }
-        if (summary.pending > 0) {
-            SummaryItem(
-                text = "${summary.pending} pending",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+
+        if (machine.checks.isNotEmpty()) {
+            item {
+                CheckFilterRow(selected = checkFilter, onSelect = onFilterChange)
+            }
         }
-        if (summary.passed > 0) {
-            SummaryItem(text = "${summary.passed} passed", color = MaterialTheme.colorScheme.primary)
+
+        if (visibleChecks.isEmpty()) {
+            item {
+                Text(
+                    text = if (machine.checks.isEmpty()) {
+                        "No maintenance checks yet. Tap \"New check\" to add one."
+                    } else {
+                        "No checks with this status."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            items(visibleChecks, key = { it.id }) { check ->
+                CheckCard(
+                    check = check,
+                    onComplete = { status -> onComplete(check, status) },
+                    onReset = { onReset(check) },
+                    onEdit = { onEdit(check) },
+                    onDelete = { onDelete(check) }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SummaryItem(text: String, color: Color) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = color
-    )
+private fun MachineInfoCard(machine: Machine) {
+    val summary = CheckSummary.from(machine.checks)
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                InfoItem(
+                    label = "Serial number",
+                    value = machine.serialNumber.ifBlank { "-" }
+                )
+                InfoItem(
+                    label = "Location",
+                    value = machine.location.ifBlank { "-" }
+                )
+            }
+            if (summary.total > 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "${summary.total} checks",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (summary.failed > 0) {
+                        Text(
+                            text = "${summary.failed} failed",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (summary.pending > 0) {
+                        Text(
+                            text = "${summary.pending} pending",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (summary.passed > 0) {
+                        Text(
+                            text = "${summary.passed} passed",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoItem(label: String, value: String) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+@Composable
+private fun HistoryTab(history: List<MaintenanceHistoryEntry>) {
+    if (history.isEmpty()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Filled.History,
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "No maintenance history yet",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "Completed checks will appear here.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
+    ) {
+        items(history, key = { it.id }) { entry ->
+            HistoryCard(entry = entry)
+        }
+    }
+}
+
+@Composable
+private fun HistoryCard(entry: MaintenanceHistoryEntry) {
+    Card(
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (entry.status == CheckStatus.PASSED) {
+                        Icons.Filled.CheckCircle
+                    } else {
+                        Icons.Filled.Error
+                    },
+                    contentDescription = null,
+                    tint = if (entry.status == CheckStatus.PASSED) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                    modifier = Modifier.size(28.dp)
+                )
+                Column {
+                    Text(
+                        text = entry.checkTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = formatDateTime(entry.performedAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (entry.note.isNotBlank()) {
+                        Text(
+                            text = entry.note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                StatusChip(status = entry.status)
+                if (entry.recurrence != RecurrenceInterval.NONE) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    RecurrenceBadge(recurrence = entry.recurrence)
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -333,7 +544,7 @@ private fun CheckFilterRow(
                 label = { Text("All") }
             )
         }
-        items(CheckStatus.values()) { status ->
+        items(CheckStatus.entries) { status ->
             FilterChip(
                 selected = selected == status,
                 onClick = { onSelect(status) },
@@ -352,20 +563,28 @@ private fun CheckCard(
     onDelete: () -> Unit
 ) {
     Card(
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = if (check.isOverdue()) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            }
+        ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Text(
                     text = check.title,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
+                Spacer(modifier = Modifier.width(8.dp))
                 StatusChip(status = check.status)
             }
             if (check.description.isNotBlank()) {
@@ -376,7 +595,7 @@ private fun CheckCard(
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
-            if (check.note.isNotBlank()) {
+            if (check.note.isNotBlank() && check.status != CheckStatus.PENDING) {
                 Text(
                     text = "Result note",
                     style = MaterialTheme.typography.labelSmall,
@@ -393,12 +612,28 @@ private fun CheckCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (check.recurrence != RecurrenceInterval.NONE) {
+                    RecurrenceBadge(recurrence = check.recurrence)
+                }
+                DueBadge(check = check)
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = check.performedAt?.let { "Performed: ${formatTimestamp(it)}" }
-                        ?: "Not performed yet",
+                    text = when {
+                        check.nextDueAt != null && check.status == CheckStatus.PENDING ->
+                            "Due: ${formatDate(check.nextDueAt)}"
+
+                        check.performedAt != null -> "Performed: ${formatDate(check.performedAt)}"
+                        else -> "Not performed yet"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -427,7 +662,8 @@ private fun CheckCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("Passed", modifier = Modifier.padding(start = 4.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Passed")
                 }
                 FilledTonalButton(
                     onClick = { onComplete(CheckStatus.FAILED) },
@@ -439,7 +675,8 @@ private fun CheckCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Filled.Error, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("Failed", modifier = Modifier.padding(start = 4.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Failed")
                 }
                 OutlinedButton(
                     onClick = onReset,
@@ -447,47 +684,10 @@ private fun CheckCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("Reset", modifier = Modifier.padding(start = 4.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Reset")
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun StatusChip(status: CheckStatus) {
-    val containerColor: Color
-    val contentColor: Color
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
-    when (status) {
-        CheckStatus.PASSED -> {
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            icon = Icons.Filled.CheckCircle
-        }
-        CheckStatus.FAILED -> {
-            containerColor = MaterialTheme.colorScheme.errorContainer
-            contentColor = MaterialTheme.colorScheme.onErrorContainer
-            icon = Icons.Filled.Error
-        }
-        CheckStatus.PENDING -> {
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-            icon = Icons.Filled.Schedule
-        }
-    }
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = containerColor,
-        contentColor = contentColor
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
-            Text(text = status.label, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -497,12 +697,14 @@ private fun CheckFormDialog(
     dialogTitle: String,
     initialTitle: String,
     initialDescription: String,
+    initialRecurrence: RecurrenceInterval,
     confirmLabel: String,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, description: String) -> Unit
+    onConfirm: (title: String, description: String, recurrence: RecurrenceInterval) -> Unit
 ) {
     var title by remember { mutableStateOf(initialTitle) }
     var description by remember { mutableStateOf(initialDescription) }
+    var recurrence by remember { mutableStateOf(initialRecurrence) }
 
     val titleValid = title.isNotBlank() && title.length <= MAX_FIELD_LENGTH
     val descriptionValid = description.length <= MAX_DESCRIPTION_LENGTH
@@ -511,7 +713,7 @@ private fun CheckFormDialog(
         onDismissRequest = onDismiss,
         title = { Text(dialogTitle) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -531,11 +733,15 @@ private fun CheckFormDialog(
                     supportingText = { Text("${description.length}/$MAX_DESCRIPTION_LENGTH") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                RecurrenceSelector(
+                    selected = recurrence,
+                    onSelect = { recurrence = it }
+                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(title.trim(), description.trim()) },
+                onClick = { onConfirm(title.trim(), description.trim(), recurrence) },
                 enabled = titleValid && descriptionValid
             ) {
                 Text(confirmLabel)
@@ -557,12 +763,17 @@ private fun CompleteCheckDialog(
     onConfirm: (note: String) -> Unit
 ) {
     var note by remember { mutableStateOf("") }
+    val isRecurring = check.recurrence != RecurrenceInterval.NONE
 
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
-                imageVector = if (target == CheckStatus.PASSED) Icons.Filled.CheckCircle else Icons.Filled.Error,
+                imageVector = if (target == CheckStatus.PASSED) {
+                    Icons.Filled.CheckCircle
+                } else {
+                    Icons.Filled.Error
+                },
                 contentDescription = null
             )
         },
@@ -573,6 +784,14 @@ private fun CompleteCheckDialog(
                     text = "Record the result for \"${check.title}\".",
                     style = MaterialTheme.typography.bodyMedium
                 )
+                if (isRecurring) {
+                    Text(
+                        text = "This check repeats ${check.recurrence.label.lowercase()}. " +
+                            "A new due date will be scheduled automatically.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
@@ -600,6 +819,3 @@ private fun CompleteCheckDialog(
         }
     )
 }
-
-private fun formatTimestamp(timestamp: Long): String =
-    SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(timestamp))
