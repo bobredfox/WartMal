@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -62,6 +63,7 @@ import com.otterbau.wartmal.data.Machine
 import com.otterbau.wartmal.data.MaintenanceHistoryEntry
 import com.otterbau.wartmal.data.RecurrenceInterval
 import com.otterbau.wartmal.data.sortedForDisplay
+import java.util.Locale
 
 private const val MAX_FIELD_LENGTH = 120
 private const val MAX_DESCRIPTION_LENGTH = 1000
@@ -120,6 +122,11 @@ fun MachineDetailScreen(
                 },
                 actions = {
                     if (machine != null) {
+                        if (machine.locationPoint != null) {
+                            IconButton(onClick = { viewModel.navigateToFindMachine(machine.id) }) {
+                                Icon(Icons.Filled.Navigation, contentDescription = "Find machine")
+                            }
+                        }
                         IconButton(onClick = { viewModel.navigateToEditMachine(machine.id) }) {
                             Icon(Icons.Filled.Edit, contentDescription = "Edit machine")
                         }
@@ -185,7 +192,8 @@ fun MachineDetailScreen(
                             viewModel.updateCheckStatus(machine.id, it.id, CheckStatus.PENDING)
                         },
                         onEdit = { editingCheck = it },
-                        onDelete = { deletingCheck = it }
+                        onDelete = { deletingCheck = it },
+                        onFind = { viewModel.navigateToFindMachine(it.id) }
                     )
                 }
 
@@ -295,7 +303,8 @@ private fun ChecksTab(
     onComplete: (Check, CheckStatus) -> Unit,
     onReset: (Check) -> Unit,
     onEdit: (Check) -> Unit,
-    onDelete: (Check) -> Unit
+    onDelete: (Check) -> Unit,
+    onFind: (Machine) -> Unit
 ) {
     val visibleChecks = machine.checks
         .sortedForDisplay()
@@ -307,7 +316,7 @@ private fun ChecksTab(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
     ) {
         item {
-            MachineInfoCard(machine = machine)
+            MachineInfoCard(machine = machine, onFind = onFind)
         }
 
         if (machine.checks.isNotEmpty()) {
@@ -343,7 +352,7 @@ private fun ChecksTab(
 }
 
 @Composable
-private fun MachineInfoCard(machine: Machine) {
+private fun MachineInfoCard(machine: Machine, onFind: (Machine) -> Unit = {}) {
     val summary = CheckSummary.from(machine.checks)
     Card(
         shape = MaterialTheme.shapes.large,
@@ -365,6 +374,33 @@ private fun MachineInfoCard(machine: Machine) {
                     label = "Location",
                     value = machine.location.ifBlank { "-" }
                 )
+            }
+            if (machine.locationPoint != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    InfoItem(
+                        label = "GPS",
+                        value = String.format(
+                            Locale.US,
+                            "%.5f, %.5f",
+                            machine.locationPoint.latitude,
+                            machine.locationPoint.longitude
+                        )
+                    )
+                    FilledTonalButton(onClick = { onFind(machine) }) {
+                        Icon(
+                            Icons.Filled.Navigation,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Find")
+                    }
+                }
             }
             if (summary.total > 0) {
                 Spacer(modifier = Modifier.height(12.dp))

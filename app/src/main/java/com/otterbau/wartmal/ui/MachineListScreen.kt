@@ -19,12 +19,14 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -99,7 +101,12 @@ fun MachineListScreen(
                 items(machines, key = { it.id }) { machine ->
                     MachineCard(
                         machine = machine,
-                        onClick = { viewModel.navigateToDetail(machine.id) }
+                        onClick = { viewModel.navigateToDetail(machine.id) },
+                        onFind = if (machine.locationPoint != null) {
+                            { viewModel.navigateToFindMachine(machine.id) }
+                        } else {
+                            null
+                        }
                     )
                 }
             }
@@ -137,7 +144,8 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 @Composable
 private fun MachineCard(
     machine: Machine,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFind: (() -> Unit)? = null
 ) {
     val summary = CheckSummary.from(machine.checks)
     val overdue = machine.overdueCount()
@@ -176,6 +184,15 @@ private fun MachineCard(
                             text = "$overdue overdue",
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+                if (onFind != null) {
+                    IconButton(onClick = onFind) {
+                        Icon(
+                            imageVector = Icons.Filled.Navigation,
+                            contentDescription = "Find machine",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }

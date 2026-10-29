@@ -2,6 +2,7 @@ package com.otterbau.wartmal
 
 import com.otterbau.wartmal.data.CheckStatus
 import com.otterbau.wartmal.data.CheckSummary
+import com.otterbau.wartmal.data.GeoPoint
 import com.otterbau.wartmal.data.MachineRepository
 import com.otterbau.wartmal.data.RecurrenceInterval
 import com.otterbau.wartmal.data.dueSoonCount
@@ -34,6 +35,37 @@ class MachineRepositoryTest {
         assertEquals("Press", machine.name)
         assertEquals("SN-9", machine.serialNumber)
         assertEquals("Hall 2", machine.location)
+    }
+
+    @Test
+    fun addMachine_storesOptionalLocationPoint() {
+        val point = GeoPoint(latitude = 52.52, longitude = 13.405)
+        val machine = repository.addMachine("Press", "SN-1", "Hall 1", locationPoint = point)
+        assertEquals(point, machine.locationPoint)
+        assertEquals(point, repository.getMachine(machine.id)!!.locationPoint)
+    }
+
+    @Test
+    fun addMachine_withoutLocationPoint_defaultsToNull() {
+        val machine = repository.addMachine("Press", "SN-1", "Hall 1")
+        assertNull(machine.locationPoint)
+    }
+
+    @Test
+    fun updateMachine_canSetChangeAndClearLocationPoint() {
+        val machine = repository.addMachine("Press", "SN-1", "Hall 1")
+        val point = GeoPoint(latitude = 48.1, longitude = 11.6)
+        repository.updateMachine(machine.copy(locationPoint = point))
+        assertEquals(point, repository.getMachine(machine.id)!!.locationPoint)
+
+        repository.updateMachine(machine.copy(locationPoint = null))
+        assertNull(repository.getMachine(machine.id)!!.locationPoint)
+    }
+
+    @Test
+    fun seedData_firstMachineHasCoordinates() {
+        val machine = repository.getMachines().first()
+        assertNotNull(machine.locationPoint)
     }
 
     @Test

@@ -85,6 +85,7 @@ data class Machine(
     val name: String,
     val serialNumber: String,
     val location: String,
+    val locationPoint: GeoPoint? = null,
     val checks: List<Check> = emptyList(),
     val history: List<MaintenanceHistoryEntry> = emptyList()
 )
