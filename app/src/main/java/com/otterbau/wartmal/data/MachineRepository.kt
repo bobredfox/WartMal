@@ -26,6 +26,7 @@ class MachineRepository {
             name = "CNC Milling Machine A1",
             serialNumber = "CNC-A1-2023-0042",
             location = "Workshop Floor 1 - Bay 3",
+            locationPoint = GeoPoint(latitude = 52.520008, longitude = 13.404954),
             checks = listOf(
                 Check(
                     title = "Spindle oil level",
@@ -125,14 +126,20 @@ class MachineRepository {
     fun getHistory(machineId: String): List<MaintenanceHistoryEntry> =
         getMachine(machineId)?.history?.sortedByDescending { it.performedAt } ?: emptyList()
 
-    fun addMachine(name: String, serialNumber: String, location: String): Machine {
+    fun addMachine(
+        name: String,
+        serialNumber: String,
+        location: String,
+        locationPoint: GeoPoint? = null
+    ): Machine {
         requireValidText(name, "Machine name", MAX_FIELD_LENGTH)
         requireValidOptionalText(serialNumber, "Serial number", MAX_FIELD_LENGTH)
         requireValidOptionalText(location, "Location", MAX_FIELD_LENGTH)
         val machine = Machine(
             name = name.trim(),
             serialNumber = serialNumber.trim(),
-            location = location.trim()
+            location = location.trim(),
+            locationPoint = locationPoint
         )
         machines.add(machine)
         return machine

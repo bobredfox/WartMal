@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.otterbau.wartmal.ui.AddEditMachineScreen
+import com.otterbau.wartmal.ui.FindMachineScreen
 import com.otterbau.wartmal.ui.MachineDetailScreen
 import com.otterbau.wartmal.ui.MachineListScreen
 import com.otterbau.wartmal.ui.MachineViewModel
@@ -122,6 +123,11 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 machineId = current.machineId,
                                 isEdit = true
+                            )
+
+                            is Screen.FindMachine -> FindMachineScreen(
+                                viewModel = viewModel,
+                                machineId = current.machineId
                             )
                         }
                     }

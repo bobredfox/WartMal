@@ -1,16 +1,20 @@
 package com.otterbau.wartmal.ui
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.otterbau.wartmal.data.AppError
 import com.otterbau.wartmal.data.AppResult
 import com.otterbau.wartmal.data.CheckStatus
+import com.otterbau.wartmal.data.GeoPoint
 import com.otterbau.wartmal.data.Machine
 import com.otterbau.wartmal.data.MachineRepository
 import com.otterbau.wartmal.data.RecurrenceInterval
 import com.otterbau.wartmal.data.UpcomingCheck
 import com.otterbau.wartmal.data.WartMalException
 import com.otterbau.wartmal.data.upcomingChecks
+import com.otterbau.wartmal.location.DevicePosition
+import com.otterbau.wartmal.location.LocationTracker
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,6 +34,7 @@ sealed class Screen {
     data class MachineDetail(val machineId: String) : Screen()
     data object AddMachine : Screen()
     data class EditMachine(val machineId: String) : Screen()
+    data class FindMachine(val machineId: String) : Screen()
 }
 
 sealed class UiMessage {
@@ -38,9 +43,23 @@ sealed class UiMessage {
     data class Error(override val text: String) : UiMessage()
 }
 
-class MachineViewModel : ViewModel() {
+class MachineViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = MachineRepository()
+    private val locationTracker = LocationTracker(application)
+
+    val devicePosition: StateFlow<DevicePosition?> = locationTracker.position
+    val deviceAzimuth: StateFlow<Float> = locationTracker.deviceAzimuth
+
+    private val _locationPermissionGranted = MutableStateFlow(locationTracker.hasLocationPermission)
+    val locationPermissionGranted: StateFlow<Boolean> = _locationPermissionGranted.asStateFlow()
+
+    fun refreshLocationPermission() {
+        _locationPermissionGranted.value = locationTracker.hasLocationPermission
+        if (locationTracker.hasLocationPermission) {
+            locationTracker.start()
+        }
+    }
 
     private val _machines = MutableStateFlow(repository.getMachines())
     val machines: StateFlow<List<Machine>> = _machines.asStateFlow()
@@ -108,14 +127,34 @@ class MachineViewModel : ViewModel() {
         _screen.value = Screen.EditMachine(machineId)
     }
 
+    fun navigateToFindMachine(machineId: String) {
+        _screen.value = Screen.FindMachine(machineId)
+        startLocationTracking()
+    }
+
+    fun startLocationTracking() {
+        if (locationTracker.hasLocationPermission) {
+            locationTracker.start()
+        }
+    }
+
+    fun stopLocationTracking() {
+        locationTracker.stop()
+    }
+
     fun navigateBack() {
         _screen.value = null
     }
 
     fun getMachine(id: String): Machine? = repository.getMachine(id)
 
-    fun addMachine(name: String, serialNumber: String, location: String) {
-        runCatching { repository.addMachine(name, serialNumber, location) }
+    fun addMachine(
+        name: String,
+        serialNumber: String,
+        location: String,
+        locationPoint: GeoPoint? = null
+    ) {
+        runCatching { repository.addMachine(name, serialNumber, location, locationPoint) }
             .let(
                 handle(successMessage = { "Machine \"${it.name}\" added" }) {
                     refresh()
@@ -124,8 +163,23 @@ class MachineViewModel : ViewModel() {
             )
     }
 
-    fun updateMachine(machine: Machine, name: String, serialNumber: String, location: String) {
-        runCatching { repository.updateMachine(machine.copy(name = name, serialNumber = serialNumber, location = location)) }
+    fun updateMachine(
+        machine: Machine,
+        name: String,
+        serialNumber: String,
+        location: String,
+        locationPoint: GeoPoint? = null
+    ) {
+        runCatching {
+            repository.updateMachine(
+                machine.copy(
+                    name = name,
+                    serialNumber = serialNumber,
+                    location = location,
+                    locationPoint = locationPoint
+                )
+            )
+        }
             .let(
                 handle(successMessage = { "Machine \"${name.trim()}\" saved" }) {
                     refresh()
@@ -232,5 +286,10 @@ class MachineViewModel : ViewModel() {
                     refresh()
                 }
             )
+    }
+
+    override fun onCleared() {
+        locationTracker.stop()
+        super.onCleared()
     }
 }
