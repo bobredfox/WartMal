@@ -1,22 +1,32 @@
 package com.otterbau.wartmal.ui
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.otterbau.wartmal.data.AppError
 import com.otterbau.wartmal.data.AppResult
 import com.otterbau.wartmal.data.CheckStatus
 import com.otterbau.wartmal.data.Machine
 import com.otterbau.wartmal.data.MachineRepository
 import com.otterbau.wartmal.data.RecurrenceInterval
+import com.otterbau.wartmal.data.UpcomingCheck
 import com.otterbau.wartmal.data.WartMalException
+import com.otterbau.wartmal.data.upcomingChecks
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+
+enum class RootTab {
+    MyDay,
+    Machines
+}
 
 sealed class Screen {
-    data object MachineList : Screen()
     data class MachineDetail(val machineId: String) : Screen()
     data object AddMachine : Screen()
     data class EditMachine(val machineId: String) : Screen()
@@ -35,8 +45,15 @@ class MachineViewModel : ViewModel() {
     private val _machines = MutableStateFlow(repository.getMachines())
     val machines: StateFlow<List<Machine>> = _machines.asStateFlow()
 
-    private val _screen = MutableStateFlow<Screen>(Screen.MachineList)
-    val screen: StateFlow<Screen> = _screen.asStateFlow()
+    val upcomingChecks: StateFlow<List<UpcomingCheck>> = _machines
+        .map { it.upcomingChecks() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), emptyList())
+
+    private val _screen = MutableStateFlow<Screen?>(null)
+    val screen: StateFlow<Screen?> = _screen.asStateFlow()
+
+    private val _selectedTab = MutableStateFlow(RootTab.MyDay)
+    val selectedTab: StateFlow<RootTab> = _selectedTab.asStateFlow()
 
     private val _uiMessages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 1)
     val uiMessages: SharedFlow<UiMessage> = _uiMessages.asSharedFlow()
@@ -74,6 +91,11 @@ class MachineViewModel : ViewModel() {
         _machines.value = repository.getMachines()
     }
 
+    fun navigateToTab(tab: RootTab) {
+        _selectedTab.value = tab
+        _screen.value = null
+    }
+
     fun navigateToDetail(machineId: String) {
         _screen.value = Screen.MachineDetail(machineId)
     }
@@ -87,7 +109,7 @@ class MachineViewModel : ViewModel() {
     }
 
     fun navigateBack() {
-        _screen.value = Screen.MachineList
+        _screen.value = null
     }
 
     fun getMachine(id: String): Machine? = repository.getMachine(id)
@@ -97,7 +119,7 @@ class MachineViewModel : ViewModel() {
             .let(
                 handle(successMessage = { "Machine \"${it.name}\" added" }) {
                     refresh()
-                    _screen.value = Screen.MachineList
+                    _screen.value = null
                 }
             )
     }
@@ -107,7 +129,7 @@ class MachineViewModel : ViewModel() {
             .let(
                 handle(successMessage = { "Machine \"${name.trim()}\" saved" }) {
                     refresh()
-                    _screen.value = Screen.MachineList
+                    _screen.value = Screen.MachineDetail(machine.id)
                 }
             )
     }
@@ -122,7 +144,7 @@ class MachineViewModel : ViewModel() {
                     }
                 ) {
                     refresh()
-                    _screen.value = Screen.MachineList
+                    _screen.value = null
                 }
             )
     }

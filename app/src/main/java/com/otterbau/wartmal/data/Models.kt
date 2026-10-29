@@ -1,5 +1,6 @@
 package com.otterbau.wartmal.data
 
+import java.util.Calendar
 import java.util.UUID
 
 private const val DAY_MILLIS = 86_400_000L
@@ -93,3 +94,53 @@ fun Machine.overdueCount(now: Long = System.currentTimeMillis()): Int =
 
 fun Machine.dueSoonCount(now: Long = System.currentTimeMillis()): Int =
     checks.count { it.isDueSoon(now) }
+
+fun startOfDay(now: Long = System.currentTimeMillis()): Long =
+    Calendar.getInstance().apply {
+        timeInMillis = now
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+data class UpcomingCheck(
+    val machineId: String,
+    val machineName: String,
+    val check: Check
+)
+
+enum class UpcomingGroup {
+    Overdue,
+    Today,
+    Upcoming
+}
+
+fun List<Machine>.upcomingChecks(
+    now: Long = System.currentTimeMillis(),
+    horizonMillis: Long = 7 * DAY_MILLIS
+): List<UpcomingCheck> =
+    flatMap { machine ->
+        machine.checks
+            .filter { it.status == CheckStatus.PENDING && it.nextDueAt != null }
+            .map { UpcomingCheck(machineId = machine.id, machineName = machine.name, check = it) }
+    }.filter { it.check.nextDueAt!! <= now + horizonMillis }
+        .sortedWith(
+            compareByDescending<UpcomingCheck> { it.check.isOverdue(now) }
+                .thenBy { it.check.nextDueAt ?: Long.MAX_VALUE }
+        )
+
+fun List<UpcomingCheck>.groupedByDay(
+    now: Long = System.currentTimeMillis()
+): Map<UpcomingGroup, List<UpcomingCheck>> {
+    val todayStart = startOfDay(now)
+    val tomorrowStart = todayStart + DAY_MILLIS
+    return groupBy { item ->
+        val dueAt = item.check.nextDueAt!!
+        when {
+            dueAt <= now -> UpcomingGroup.Overdue
+            dueAt < tomorrowStart -> UpcomingGroup.Today
+            else -> UpcomingGroup.Upcoming
+        }
+    }.withDefault { emptyList() }
+}
