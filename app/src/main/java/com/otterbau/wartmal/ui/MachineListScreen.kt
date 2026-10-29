@@ -57,8 +57,16 @@ fun MachineListScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeTopAppBar(
-                title = { Text("WartMal") },
-                subtitle = { Text("${machines.size} machines") },
+                title = {
+                    Column {
+                        Text("WartMal")
+                        Text(
+                            text = "${machines.size} machines",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,

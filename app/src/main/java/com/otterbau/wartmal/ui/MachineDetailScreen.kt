@@ -96,16 +96,21 @@ fun MachineDetailScreen(
         topBar = {
             LargeTopAppBar(
                 title = {
-                    Text(
-                        text = machine?.name ?: "Machine",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                subtitle = {
-                    val subtitleMachine = machine
-                    if (subtitleMachine != null) {
-                        Text(subtitleMachine.location.ifBlank { subtitleMachine.serialNumber })
+                    Column {
+                        Text(
+                            text = machine?.name ?: "Machine",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (machine != null) {
+                            Text(
+                                text = machine.location.ifBlank { machine.serialNumber },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 },
                 navigationIcon = {

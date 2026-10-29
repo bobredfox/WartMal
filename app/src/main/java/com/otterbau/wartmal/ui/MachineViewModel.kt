@@ -23,8 +23,9 @@ sealed class Screen {
 }
 
 sealed class UiMessage {
-    data class Success(val text: String) : UiMessage()
-    data class Error(val text: String) : UiMessage()
+    abstract val text: String
+    data class Success(override val text: String) : UiMessage()
+    data class Error(override val text: String) : UiMessage()
 }
 
 class MachineViewModel : ViewModel() {
