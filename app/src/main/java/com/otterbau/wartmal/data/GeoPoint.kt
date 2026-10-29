@@ -1,16 +1,19 @@
 package com.otterbau.wartmal.data
 
 import java.util.Locale
+import kotlin.math.PI
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
-import kotlin.math.toDegrees
-import kotlin.math.toRadians
 
 private const val EARTH_RADIUS_METERS = 6_371_000.0
+
+private fun Double.toRadians(): Double = this * PI / 180.0
+
+private fun Double.toDegrees(): Double = this * 180.0 / PI
 
 data class GeoPoint(val latitude: Double, val longitude: Double) {
 

@@ -266,11 +266,12 @@ fun AddEditMachineScreen(
                     Text("Clear")
                 }
             }
-            if (devicePosition != null && hasLocationPermission) {
+            val currentPosition = devicePosition
+            if (currentPosition != null && hasLocationPermission) {
                 Text(
                     text = "Device position: " +
-                        "${formatCoordinate(devicePosition.point.latitude)}, " +
-                        formatCoordinate(devicePosition.point.longitude),
+                        "${formatCoordinate(currentPosition.point.latitude)}, " +
+                        formatCoordinate(currentPosition.point.longitude),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
